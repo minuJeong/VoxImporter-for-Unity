@@ -1,0 +1,7 @@
+{
+  "name": "com.minu.voximport",
+  "displayName": "Vox Import",
+  "version": "0.0.0",
+  "description": "import .vox file as volume tex",
+  "unity": "2021.3"
+}
