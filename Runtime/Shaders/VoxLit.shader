@@ -6,7 +6,9 @@ Shader "Lit/VoxLit"
 	#pragma shader_feature DYNAMICLIGHTMAP_ON
 	#pragma shader_feature LIGHTMAP_ON
 	#pragma shader_feature DEBUG_DISPLAY
-	
+
+	#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Macros.hlsl"
+	#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Random.hlsl"
 	#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 	#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SurfaceData.hlsl"
 	#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/UnityGBuffer.hlsl"
@@ -37,7 +39,7 @@ Shader "Lit/VoxLit"
 		half4 tangentWS : Texcoord5;
 		half4 positionWS : Texcoord0;
 		float3 positionOS : Texcoord6;
-		float3 ray : Texcoord7;
+		float4 ray : Texcoord7;
 		half4 fogFactorAndVertexLight : Texcoord2;
 		DECLARE_LIGHTMAP_OR_SH(staticLightmapUV, vertexSH, 3);
 #ifdef DYNAMICLIGHTMAP_ON
@@ -49,18 +51,25 @@ Shader "Lit/VoxLit"
 	{
 		VertexPositionInputs positionInputs = GetVertexPositionInputs(input.position.xyz);
 		VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normal.xyz);
-		half3 vertexLight = VertexLighting(positionInputs.positionWS, normalInputs.normalWS);
-		half fogFactor = ComputeFogFactor(positionInputs.positionCS.z);
+		const half3 vertexLight = VertexLighting(positionInputs.positionWS, normalInputs.normalWS);
+		const half fogFactor = ComputeFogFactor(positionInputs.positionCS.z);
+		const float3 deltaCamera = positionInputs.positionWS.xyz - _WorldSpaceCameraPos.xyz;
 		
 		Varyings output = (Varyings)0;
 		output.positionCS = positionInputs.positionCS;
 		output.positionOS.xyz = input.position.xyz;
-		output.ray.xyz = positionInputs.positionWS.xyz - _WorldSpaceCameraPos.xyz;
+		output.ray.xyz = TransformWorldToObject(deltaCamera);
 		output.positionWS.xyz = positionInputs.positionWS.xyz;
 		output.normalWS.xyz = normalInputs.normalWS.xyz;
 		output.tangentWS.xyz = normalInputs.tangentWS.xyz;
 		output.fogFactorAndVertexLight = half4(fogFactor, vertexLight);
+		output.ray.w = length(deltaCamera);
 		return output;
+	}
+
+	inline float Hash(float2 uv)
+	{
+	    return frac(sin(dot(uv, float2(12.9898, 78.233)))*43758.5453);
 	}
 
 	half4 MarchVoxel(Varyings input)
@@ -69,7 +78,7 @@ Shader "Lit/VoxLit"
 		const float step = rcp(maxSteps * 0.5h);
 		
 		const float3 origin = input.positionOS;
-		const float3 ray = mul(unity_WorldToObject, float4(normalize(input.ray.xyz), 1.0h)).xyz;
+		const float3 ray = normalize(input.ray.xyz);
 
 		half4 color = half4(0.0h, 0.0h, 0.0h, 0.0h);
 		float travel = 0.0f;
@@ -102,6 +111,7 @@ Shader "Lit/VoxLit"
 
 	half4 ForwardFrag(Varyings input): SV_Target
 	{
+		clip(0.5h - smoothstep(2.1h, 2.0h, input.ray.w - Hash(GetNormalizedScreenSpaceUV(input.positionCS))));
 		return MarchVoxel(input);
 	}
 	ENDHLSL

@@ -5,7 +5,6 @@ using System.Text;
 using UnityEditor;
 using UnityEditor.AssetImporters;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace VoxImporter.Editor
 {
@@ -15,11 +14,10 @@ namespace VoxImporter.Editor
         [SerializeField] private TextureWrapMode wrapMode;
         [SerializeField] private FilterMode filterMode;
         [SerializeField] private int anisoLevel;
-        
+
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var voxelsData = DeserializeVox(ctx.assetPath);
-            Debug.Log(string.Join("\n", voxelsData.Messages));
 
             foreach (var model in voxelsData.Models)
             {
@@ -27,26 +25,35 @@ namespace VoxImporter.Editor
                     model.Size.x, model.Size.y, model.Size.z,
                     TextureFormat.RGBAFloat, false);
 
-                var colors = new Color[model.Size.x * model.Size.y * model.Size.z];
+                var pixels = new Color[model.Size.x * model.Size.y * model.Size.z];
                 foreach (var voxel in model.Voxels)
                 {
                     var (x, y, z, i) = (voxel.Position.x, voxel.Position.y, voxel.Position.z, voxel.ColorIndex);
-                    var colorBytes = BitConverter.GetBytes(model.Colors[i]);
-                    var (r, g, b, a) =
-                        ((int)colorBytes[0], (int)colorBytes[1], (int)colorBytes[2], (int)colorBytes[3]);
-                    var color = new Color(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
                     var index = x + y * model.Size.x + z * model.Size.x * model.Size.y;
-                    // colors[index] = color;
-                    colors[index] = new Color(1, 1, 1, 1);
+
+                    if (model.Colors != null)
+                    {
+                        var colorBytes = BitConverter.GetBytes(model.Colors[i]);
+                        var (r, g, b, a) = ((int)colorBytes[0], (int)colorBytes[1], (int)colorBytes[2],
+                            (int)colorBytes[3]);
+                        var color = new Color(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+                        pixels[index] = color;
+                    }
+                    else
+                    {
+                        pixels[index] = new Color(1.0f, 1.0f, 1.0f, 1.0f);
+                    }
                 }
 
-                volumeTexture.SetPixels(colors);
+                volumeTexture.SetPixels(pixels);
                 volumeTexture.Apply();
                 volumeTexture.wrapMode = wrapMode;
                 volumeTexture.filterMode = filterMode;
                 volumeTexture.anisoLevel = anisoLevel;
                 ctx.AddObjectToAsset("vox_texture", volumeTexture);
             }
+
+            Debug.Log(string.Join("\n", voxelsData.Messages));
         }
 
         private static VoxelsData DeserializeVox(string path)
@@ -116,6 +123,7 @@ namespace VoxImporter.Editor
 
                 default:
                     // throw new Exception($"unrecognized chunk id: {chunkID}");
+                    Debug.LogError($"unrecognized chunk id: {chunkID}, remaining span length: {spanAfter.Length}");
                     break;
             }
         }
@@ -169,7 +177,6 @@ namespace VoxImporter.Editor
 
             var model = voxelsData.Models[voxelsData.InitializingIndex];
             model.Voxels = new Voxel[numVoxels];
-            model.Colors = new int[numVoxels];
             for (var index = 0; index < numVoxels; ++index)
             {
                 var x = span[4 + index * 4 + 0];
@@ -184,16 +191,18 @@ namespace VoxImporter.Editor
             }
 
             DeserializeChunk(dataAfter[..12], dataAfter[12..], ref voxelsData);
-
             return new ChunkXyzI()
             {
                 NumVoxels = numVoxels,
-                // Voxels = model.Voxels,
+                Voxels = Array.ConvertAll(model.Voxels, (voxel) => voxel.ToInt()),
             };
         }
 
         private static ChunkRgba DeserializeRgbaChunk(Span<byte> span, Span<byte> dataAfter, ref VoxelsData voxelsData)
         {
+            Debug.Log("Colors");
+            var model = voxelsData.Models[voxelsData.InitializingIndex];
+            model.Colors = new int[256];
             return new ChunkRgba() { };
         }
     }
@@ -216,6 +225,15 @@ namespace VoxImporter.Editor
     {
         internal Vector3Int Position;
         internal int ColorIndex;
+
+        public int ToInt()
+        {
+            var x = (byte)Position.x;
+            var y = (byte)Position.y;
+            var z = (byte)Position.z;
+            var i = (byte)ColorIndex;
+            return BitConverter.ToInt32(new byte[] { x, y, z, i });
+        }
     }
 
     internal sealed class ChunkMain
@@ -265,7 +283,7 @@ namespace VoxImporter.Editor
         {
             serializedObject.Update();
 
-            if (_propWrapMode != null)  EditorGUILayout.PropertyField(_propWrapMode);
+            if (_propWrapMode != null) EditorGUILayout.PropertyField(_propWrapMode);
             if (_propFilterMode != null) EditorGUILayout.PropertyField(_propFilterMode);
             if (_propAnisoLevel != null) EditorGUILayout.PropertyField(_propAnisoLevel);
 
