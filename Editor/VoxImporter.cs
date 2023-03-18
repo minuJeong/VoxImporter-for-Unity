@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using UnityEditor;
 using UnityEditor.AssetImporters;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -11,6 +12,10 @@ namespace VoxImporter.Editor
     [ScriptedImporter(1, "vox")]
     public class VoxImporter : ScriptedImporter
     {
+        [SerializeField] private TextureWrapMode wrapMode;
+        [SerializeField] private FilterMode filterMode;
+        [SerializeField] private int anisoLevel;
+        
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var voxelsData = DeserializeVox(ctx.assetPath);
@@ -26,18 +31,20 @@ namespace VoxImporter.Editor
                 foreach (var voxel in model.Voxels)
                 {
                     var (x, y, z, i) = (voxel.Position.x, voxel.Position.y, voxel.Position.z, voxel.ColorIndex);
-                    // var colorBytes = BitConverter.GetBytes(model.Colors[i]);
-                    // var (r, g, b, a) =
-                    //     ((int)colorBytes[0], (int)colorBytes[1], (int)colorBytes[2], (int)colorBytes[3]);
-                    // var color = new Color(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
-                    // colors[x + y * model.Size.x + z * model.Size.x * model.Size.y] = color;
+                    var colorBytes = BitConverter.GetBytes(model.Colors[i]);
+                    var (r, g, b, a) =
+                        ((int)colorBytes[0], (int)colorBytes[1], (int)colorBytes[2], (int)colorBytes[3]);
+                    var color = new Color(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
                     var index = x + y * model.Size.x + z * model.Size.x * model.Size.y;
-                    Debug.Log($"{index}, {x}, {y}, {z}, {voxel}");
-                    colors[index] = new Color(0.5f, 0.5f, 0.5f, 1.0f);
+                    // colors[index] = color;
+                    colors[index] = new Color(1, 1, 1, 1);
                 }
 
                 volumeTexture.SetPixels(colors);
                 volumeTexture.Apply();
+                volumeTexture.wrapMode = wrapMode;
+                volumeTexture.filterMode = filterMode;
+                volumeTexture.anisoLevel = anisoLevel;
                 ctx.AddObjectToAsset("vox_texture", volumeTexture);
             }
         }
@@ -237,5 +244,33 @@ namespace VoxImporter.Editor
     internal sealed class ChunkRgba
     {
         internal int[] Colors;
+    }
+
+    [CustomEditor(typeof(VoxImporter))]
+    internal class VoxImporterEditor : ScriptedImporterEditor
+    {
+        private SerializedProperty _propWrapMode;
+        private SerializedProperty _propFilterMode;
+        private SerializedProperty _propAnisoLevel;
+
+        public override void OnEnable()
+        {
+            base.OnEnable();
+            _propWrapMode = serializedObject.FindProperty("wrapMode");
+            _propFilterMode = serializedObject.FindProperty("filterMode");
+            _propAnisoLevel = serializedObject.FindProperty("anisoLevel");
+        }
+
+        public override void OnInspectorGUI()
+        {
+            serializedObject.Update();
+
+            if (_propWrapMode != null)  EditorGUILayout.PropertyField(_propWrapMode);
+            if (_propFilterMode != null) EditorGUILayout.PropertyField(_propFilterMode);
+            if (_propAnisoLevel != null) EditorGUILayout.PropertyField(_propAnisoLevel);
+
+            serializedObject.ApplyModifiedProperties();
+            ApplyRevertGUI();
+        }
     }
 }
