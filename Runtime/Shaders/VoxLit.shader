@@ -81,7 +81,7 @@ Shader "Lit/VoxLit"
             if (voxelTex.w <= 0.0h) continue;
 
             voxelTex.w *= _Alpha;
-            color.xyz += (1.0h - color.w) * voxelTex.xyz * voxelTex.w;
+            color.xyz += (1.0h - color.w) * voxelTex.xyz;
             color.w += (1.0h - color.w) * voxelTex.w;
             if (color.w >= 1.0h) break;
         }
