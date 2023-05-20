@@ -76,7 +76,7 @@ Shader "Lit/VoxLit"
             if (max(absPos.x, max(absPos.y, absPos.z)) > 0.5f) break;
 
             half4 voxelTex = _VoxelTex.SampleGrad(
-                sampler_VoxelTex, pos + 0.5h, ddx(pos), ddy(pos)
+                sampler_VoxelTex, pos + 0.5h, ddx(ray), ddy(ray)
             );
             if (voxelTex.w <= 0.0h) continue;
 
